@@ -53,7 +53,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("Upload a CSV with your Amazon sales tax data and get instant summaries by state.")
+st.markdown("Upload CSV (Amazon consolidated sales tax report with all states).")
+# Video Tutorial Expander
+with st.expander("🎥 How to File a $0 Sales Tax Return in California (Step-by-Step for Amazon Sellers)", expanded=False):
+    st.video("https://www.youtube.com/watch?v=BlxgcWxPgt8")
 
 # File uploader
 uploaded_file = st.file_uploader("📁 Upload your CSV file", type="csv")
