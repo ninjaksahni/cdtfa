@@ -1,5 +1,9 @@
 import streamlit as st
 import pandas as pd
+import matplotlib.pyplot as plt
+from fpdf import FPDF
+from datetime import datetime
+import io
 
 st.set_page_config(page_title="Amazon Tax Sales Analyzer", layout="centered")
 st.title("📊 Amazon Tax Sales Analyzer")
@@ -10,21 +14,16 @@ st.markdown("Upload a CSV with your Amazon sales tax data and get instant summar
 uploaded_file = st.file_uploader("📁 Upload your CSV file", type="csv")
 
 if uploaded_file is not None:
-    # Read CSV
+    # Read and clean data
     df = pd.read_csv(uploaded_file)
-
-    # Keep only required columns
     required_columns = ['Ship_To_State', 'Total_Tax_Collected_By_Amazon', 'TaxExclusive_Selling_Price']
     df = df[required_columns]
 
-    # Convert to numeric
     df['Total_Tax_Collected_By_Amazon'] = pd.to_numeric(df['Total_Tax_Collected_By_Amazon'], errors='coerce')
     df['TaxExclusive_Selling_Price'] = pd.to_numeric(df['TaxExclusive_Selling_Price'], errors='coerce')
-
-    # Drop rows where tax is 0 or NaN
     df_cleaned = df[df['Total_Tax_Collected_By_Amazon'].fillna(0) != 0]
 
-    # Normalize state names
+    # Classify state
     df_cleaned['state_lower'] = df_cleaned['Ship_To_State'].astype(str).str.strip().str.lower()
     california_states = ['ca', 'california']
 
@@ -33,11 +32,11 @@ if uploaded_file is not None:
     other_sales = df_cleaned[~df_cleaned['state_lower'].isin(california_states)]['TaxExclusive_Selling_Price'].sum()
     total_sales = california_sales + other_sales
 
-    # Display summary with BIG FIGURES
+    # Summary cards
     st.markdown("---")
     st.markdown("## 🧾 Summary Totals")
-
     col1, col2 = st.columns(2)
+
     with col1:
         st.markdown(f"""
             <div style="background-color:#f0f8ff;padding:25px;border-radius:12px">
@@ -61,7 +60,55 @@ if uploaded_file is not None:
         </div>
     """, unsafe_allow_html=True)
 
-    # Display filtered table
+    # Pie Chart
+    st.markdown("### 🥧 Sales Distribution")
+    fig, ax = plt.subplots()
+    ax.pie([california_sales, other_sales], labels=["California", "Other States"], autopct='%1.1f%%', startangle=90, colors=['#0072c6', '#2e8b57'])
+    ax.axis('equal')
+    st.pyplot(fig)
+
+    # Data table
     st.markdown("---")
     st.markdown("### 🧹 Cleaned Dataset (Tax > 0)")
     st.dataframe(df_cleaned.drop(columns=['state_lower']), use_container_width=True)
+
+    # Generate PDF
+    def generate_pdf():
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", 'B', 16)
+        pdf.cell(200, 10, "Amazon Sales Tax Report", ln=True, align='C')
+        pdf.set_font("Arial", '', 12)
+        date_str = datetime.now().strftime("%B %d, %Y")
+        pdf.cell(200, 10, f"Date: {date_str}", ln=True, align='C')
+        pdf.ln(10)
+
+        pdf.set_font("Arial", 'B', 12)
+        pdf.cell(200, 10, "Summary", ln=True)
+
+        pdf.set_font("Arial", '', 12)
+        pdf.cell(200, 10, f"California Sales: ${california_sales:,.2f}", ln=True)
+        pdf.cell(200, 10, f"Other States Sales: ${other_sales:,.2f}", ln=True)
+        pdf.cell(200, 10, f"Total Sales: ${total_sales:,.2f}", ln=True)
+
+        pdf.ln(10)
+        pdf.set_font("Arial", 'B', 12)
+        pdf.cell(200, 10, "Note", ln=True)
+        pdf.set_font("Arial", '', 12)
+        pdf.multi_cell(0, 10, "This summary is based on the uploaded CSV data and includes only records where tax collected is greater than zero.")
+
+        # Output PDF to BytesIO
+        output = io.BytesIO()
+        pdf.output(output)
+        return output
+
+    # Button to download
+    st.markdown("---")
+    st.markdown("### 📥 Download Report")
+    pdf_data = generate_pdf()
+    st.download_button(
+        label="📄 Download PDF Summary",
+        data=pdf_data,
+        file_name=f"amazon_tax_summary_{datetime.now().strftime('%Y_%m_%d')}.pdf",
+        mime="application/pdf"
+    )
